@@ -6,6 +6,7 @@
 #include "zdtun.h"
 
 #define FLOW_SLOTS 1024
+#define HTTP_PREVIEW_BYTES 2048
 
 struct flow_entry {
     zdtun_5tuple_t tuple;
@@ -22,7 +23,44 @@ struct capture {
     int tun_fd;
     FILE *pcap;
     int failed;
+    struct flow_entry *flows;
 };
+
+static int flow_slot(const zdtun_5tuple_t *tuple) {
+    uint32_t hash = 2166136261u;
+    const unsigned char *key = (const unsigned char *)tuple;
+    for (size_t i = 0; i < sizeof(*tuple); i++) hash = (hash ^ key[i]) * 16777619u;
+    return hash % FLOW_SLOTS;
+}
+
+static int http_start(const zdtun_pkt_t *packet, int response) {
+    if (packet->tuple.ipproto != IPPROTO_TCP || !packet->l7_len) return 0;
+    if (response) return packet->l7_len >= 7 && !memcmp(packet->l7, "HTTP/1.", 7);
+    static const char *methods[] = {
+        "GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE "
+    };
+    for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); i++) {
+        size_t length = strlen(methods[i]);
+        if (packet->l7_len >= length && !memcmp(packet->l7, methods[i], length)) return 1;
+    }
+    return 0;
+}
+
+static void observe(struct capture *capture, int slot, int length,
+                    const zdtun_pkt_t *http, int response) {
+    JNIEnv *env = capture->env;
+    jbyteArray payload = NULL;
+    if (http) {
+        int size = min(http->l7_len, HTTP_PREVIEW_BYTES);
+        payload = (*env)->NewByteArray(env, size);
+        if (!payload) { capture->failed = 1; return; }
+        (*env)->SetByteArrayRegion(env, payload, 0, size, (const jbyte *)http->l7);
+    }
+    (*env)->CallVoidMethod(env, capture->service, capture->observe_packet,
+        slot, length, payload, (jboolean)response);
+    if (payload) (*env)->DeleteLocalRef(env, payload);
+    if ((*env)->ExceptionCheck(env)) capture->failed = 1;
+}
 
 static int inspect_packet(struct capture *capture, zdtun_t *tun, struct flow_entry *flows,
                           const char *bytes, int length, int block_unknown) {
@@ -30,14 +68,11 @@ static int inspect_packet(struct capture *capture, zdtun_t *tun, struct flow_ent
     zdtun_pkt_t packet;
     if (zdtun_parse_pkt(tun, bytes, length, &packet) != 0 ||
         (packet.flags & ZDTUN_PKT_IS_FRAGMENT)) {
-        (*env)->CallVoidMethod(env, capture->service, capture->observe_packet, -1, length);
-        return block_unknown;
+        observe(capture, -1, length, NULL, 0);
+        return capture->failed || block_unknown;
     }
     const zdtun_5tuple_t *tuple = &packet.tuple;
-    uint32_t hash = 2166136261u;
-    const unsigned char *key = (const unsigned char *)tuple;
-    for (size_t i = 0; i < sizeof(*tuple); i++) hash = (hash ^ key[i]) * 16777619u;
-    int slot = hash % FLOW_SLOTS;
+    int slot = flow_slot(tuple);
     struct flow_entry *entry = &flows[slot];
     time_t now = time(NULL);
     int syn = tuple->ipproto == IPPROTO_TCP && (((unsigned char *)packet.l4)[13] & 2);
@@ -63,9 +98,9 @@ static int inspect_packet(struct capture *capture, zdtun_t *tun, struct flow_ent
         entry->tuple = *tuple;
         entry->checked = now;
     }
-    (*env)->CallVoidMethod(env, capture->service, capture->observe_packet, slot, length);
-    if ((*env)->ExceptionCheck(env)) { capture->failed = 1; return 1; }
-    return entry->blocked;
+    const zdtun_pkt_t *http = !entry->blocked && http_start(&packet, 0) ? &packet : NULL;
+    observe(capture, slot, length, http, 0);
+    return capture->failed || entry->blocked;
 }
 
 static void record_packet(struct capture *capture, const char *packet, uint32_t length) {
@@ -88,11 +123,19 @@ static int protect_socket(zdtun_t *tun, socket_t socket) {
 }
 
 static int send_to_app(zdtun_t *tun, zdtun_pkt_t *packet, const zdtun_conn_t *connection) {
-    (void)connection;
     struct capture *capture = zdtun_userdata(tun);
     ssize_t written = TEMP_FAILURE_RETRY(write(capture->tun_fd, packet->buf, packet->len));
     if (written == packet->len) {
         record_packet(capture, packet->buf, packet->len);
+        if (!capture->failed && connection && http_start(packet, 1)) {
+            const zdtun_5tuple_t *tuple = zdtun_conn_get_5tuple(connection);
+            int slot = flow_slot(tuple);
+            struct flow_entry *entry = &capture->flows[slot];
+            if (entry->checked && !entry->blocked &&
+                memcmp(&entry->tuple, tuple, sizeof(*tuple)) == 0) {
+                observe(capture, slot, packet->len, packet, 1);
+            }
+        }
         return 0;
     }
     if (written >= 0 || errno != EAGAIN) capture->failed = 1;
@@ -105,7 +148,7 @@ JNIEXPORT jint JNICALL Java_local_helperblock_CaptureService_capture(
     jmethodID protect = (*env)->GetMethodID(env, cls, "protect", "(I)Z");
     jmethodID running = (*env)->GetMethodID(env, cls, "shouldCapture", "()Z");
     jmethodID classify = (*env)->GetMethodID(env, cls, "classifyFlow", "(II[BI[BI)Z");
-    jmethodID observe = (*env)->GetMethodID(env, cls, "observePacket", "(II)V");
+    jmethodID observe = (*env)->GetMethodID(env, cls, "observePacket", "(II[BZ)V");
     if (!protect || !running || !classify || !observe || tun_fd < 0 || tun_fd >= FD_SETSIZE) return -1;
 
     int output = dup(pcap_fd);
@@ -118,7 +161,8 @@ JNIEXPORT jint JNICALL Java_local_helperblock_CaptureService_capture(
 
     // PCAP v2.4, no truncation, LINKTYPE_RAW (IPv4/IPv6 without Ethernet).
     const uint32_t header[] = {0xa1b2c3d4, 0x00040002, 0, 0, 65535, 101};
-    struct capture capture = {env, service, protect, classify, observe, tun_fd, pcap, 0};
+    struct flow_entry flows[FLOW_SLOTS] = {0};
+    struct capture capture = {env, service, protect, classify, observe, tun_fd, pcap, 0, flows};
     if (fwrite(header, sizeof(header), 1, pcap) != 1) capture.failed = 1;
     zdtun_callbacks_t callbacks = {.send_client = send_to_app, .on_socket_open = protect_socket};
     zdtun_t *tun = zdtun_init(&callbacks, &capture);
@@ -135,7 +179,6 @@ JNIEXPORT jint JNICALL Java_local_helperblock_CaptureService_capture(
     pthread_sigmask(SIG_BLOCK, &blocked, NULL);
 
     char packet[65535];
-    struct flow_entry flows[FLOW_SLOTS] = {0};
     time_t last_purge = 0;
     while (!capture.failed && (*env)->CallBooleanMethod(env, service, running)) {
         int highest;

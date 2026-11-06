@@ -28,7 +28,7 @@ internal class MainView(context: Context, manage: () -> Unit) : LinearLayout(con
         addView(context.screenHeader(
             eyebrow = "SYSTEMHELPER BLOCKER",
             title = "通信监控",
-            subtitle = "按应用记录出站请求 · 最多保留最近 500 个包"
+            subtitle = "按应用记录出站请求 · 可查看明文 HTTP"
         ), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         addView(statusCard(manage), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
@@ -56,6 +56,9 @@ internal class MainView(context: Context, manage: () -> Unit) : LinearLayout(con
 
         requests.apply {
             setAdapter(this@MainView.adapter)
+            setOnChildClickListener { _, _, group, child, _ ->
+                showHttpPreview(context, this@MainView.adapter.getChild(group, child))
+            }
             setGroupIndicator(null)
             divider = null
             dividerHeight = 0

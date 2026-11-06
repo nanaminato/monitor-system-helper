@@ -14,7 +14,13 @@ internal data class RequestSource(
     val blocked: Boolean
 )
 
-internal data class RequestPacket(val time: Long, val source: RequestSource, val bytes: Int)
+internal data class HttpPreview(val response: Boolean, val text: String) {
+    val title: String get() = if (response) "HTTP 响应" else "HTTP 请求"
+}
+
+internal data class RequestPacket(
+    val time: Long, val source: RequestSource, val bytes: Int, val http: HttpPreview?
+)
 
 internal object RequestFeed {
     private const val LIMIT = 500
@@ -72,7 +78,18 @@ internal class RequestClassifier(
         return blocked
     }
 
-    fun observe(slot: Int, bytes: Int) {
-        RequestFeed.add(RequestPacket(System.currentTimeMillis(), flows.getOrNull(slot) ?: unknown, bytes))
+    fun observe(slot: Int, bytes: Int, payload: ByteArray?, response: Boolean) {
+        val source = flows.getOrNull(slot) ?: unknown
+        val preview = if (source.app != null && !source.blocked && payload != null) {
+            val text = payload.toString(Charsets.UTF_8)
+            val firstLine = text.lineSequence().first()
+            if (if (response) firstLine.startsWith("HTTP/1.") else " HTTP/1." in firstLine) {
+                HttpPreview(response, text.map { if (it.isISOControl() && it !in "\r\n\t") '�' else it }
+                    .joinToString(""))
+            } else null
+        } else null
+        if (!response || preview != null) {
+            RequestFeed.add(RequestPacket(System.currentTimeMillis(), source, bytes, preview))
+        }
     }
 }

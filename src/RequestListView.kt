@@ -1,5 +1,6 @@
 package local.helperblock
 
+import android.app.AlertDialog
 import android.content.Context
 import android.text.TextUtils
 import android.view.Gravity
@@ -7,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseExpandableListAdapter
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import java.text.DateFormat
 import java.util.Date
@@ -32,7 +34,7 @@ internal class RequestAdapter(private val context: Context) : BaseExpandableList
     override fun getGroupId(group: Int): Long = groups[group].app?.uid?.toLong() ?: -1L
     override fun getChildId(group: Int, child: Int): Long = child.toLong()
     override fun hasStableIds(): Boolean = false
-    override fun isChildSelectable(group: Int, child: Int): Boolean = false
+    override fun isChildSelectable(group: Int, child: Int): Boolean = getChild(group, child).http != null
 
     override fun getGroupView(group: Int, expanded: Boolean, recycled: View?, parent: ViewGroup): View {
         val row = recycled as? GroupRow ?: GroupRow(context)
@@ -156,14 +158,16 @@ private class PacketRow(context: Context) : LinearLayout(context) {
 
     fun bind(packet: RequestPacket, time: String) {
         val source = packet.source
-        protocol.text = source.protocol
+        protocol.text = if (packet.http != null) "HTTP" else source.protocol
         val known = source.protocol == "TCP" || source.protocol == "UDP"
         protocol.setTextColor(if (known) palette.accent else palette.textSecondary)
         protocol.background = context.shape(
             if (known) palette.accentMuted else palette.surface, 8, 1, palette.border
         )
         endpoint.text = source.endpoint
-        meta.text = "$time · ${if (source.blocked) "拦截" else "放行"}"
+        val label = packet.http?.let { "${it.title} · 点按查看" }
+            ?: if (source.blocked) "拦截" else "放行"
+        meta.text = "$time · $label"
         size.text = bytes(packet.bytes)
     }
 
@@ -172,4 +176,21 @@ private class PacketRow(context: Context) : LinearLayout(context) {
         value < 1024 * 1024 -> String.format(Locale.US, "%.1f KB", value / 1024.0)
         else -> String.format(Locale.US, "%.1f MB", value / (1024.0 * 1024.0))
     }
+}
+
+internal fun showHttpPreview(context: Context, packet: RequestPacket): Boolean {
+    val preview = packet.http ?: return false
+    val content = context.card(16).apply {
+        addFull(context.text(packet.source.endpoint, 13f, context.palette.textSecondary, mono = true))
+        addFull(context.text("此处显示单个 TCP 包的明文片段，最多 2 KB。", 12f, context.palette.textSecondary), top = 8)
+        addFull(context.text(preview.text, 13f, context.palette.textPrimary, mono = true).apply {
+            setTextIsSelectable(true)
+        }, top = 12)
+    }
+    AlertDialog.Builder(context)
+        .setTitle(preview.title)
+        .setView(ScrollView(context).apply { addView(content) })
+        .setPositiveButton("关闭", null)
+        .show()
+    return true
 }

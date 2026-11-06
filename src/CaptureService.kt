@@ -137,7 +137,8 @@ class CaptureService : VpnService() {
                              destination: ByteArray, destinationPort: Int): Boolean =
         classifier.classify(slot, protocol, source, sourcePort, destination, destinationPort)
 
-    private fun observePacket(slot: Int, bytes: Int) = classifier.observe(slot, bytes)
+    private fun observePacket(slot: Int, bytes: Int, payload: ByteArray?, response: Boolean) =
+        classifier.observe(slot, bytes, payload, response)
 
     private external fun capture(tunnel: Int, output: Int, blockUnknown: Boolean): Int
 
