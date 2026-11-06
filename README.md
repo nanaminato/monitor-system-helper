@@ -33,6 +33,9 @@ build/local.p12 是本地测试签名密钥，同一安装的更新需要使用�
 ## 代码结构
 
 - [MainView.kt](src/MainView.kt) 和 [MonitorView.kt](src/MonitorView.kt) 负责界面和对话框。
+  [UiTheme.kt](src/UiTheme.kt) 提供配色、圆角、文字与按钮等界面基础，界面全部由代码构建，
+  不使用 XML 资源，并跟随系统深色模式。[RequestListView.kt](src/RequestListView.kt) 与
+  [AppPicker.kt](src/AppPicker.kt) 负责请求列表行和应用选择对话框。
 - Activity 负责 VPN 授权和服务调用。[MonitorSelection.kt](src/MonitorSelection.kt) 负责应用列表、包名验证和选择保存。
 - [CaptureService.kt](src/CaptureService.kt) 和 [BlockService.kt](src/BlockService.kt) 负责 VPN 生命周期。[PcapStore.kt](src/PcapStore.kt) 负责 PCAP 文件的创建与发布。
 

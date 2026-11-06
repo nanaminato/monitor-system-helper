@@ -13,10 +13,11 @@ class MonitorActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        title = "管理应用与拦截规则"
+        applyChrome()
         selection = MonitorSelection(this)
         screen = MonitorView(
             this,
+            back = { finish() },
             chooseApps = ::chooseApps,
             addPackage = ::addPackage,
             start = ::checkStart,

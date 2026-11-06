@@ -1,15 +1,22 @@
 package local.helperblock
 
-import android.app.AlertDialog
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.text.InputType
+import android.text.TextUtils
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.ScrollView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Switch
-import android.widget.TextView
 
 internal class MonitorView(
     context: Context,
+    back: () -> Unit,
     chooseApps: () -> Unit,
     addPackage: () -> Unit,
     start: () -> Unit,
@@ -19,57 +26,228 @@ internal class MonitorView(
     enableLegacy: () -> Unit,
     disableLegacy: () -> Unit
 ) : ScrollView(context) {
-    private val selection = TextView(context)
-    private val status = TextView(context)
+    private val palette = context.palette
+    private val countChip = context.chip("未选择", palette.textTertiary, palette.surfaceMuted)
     private val rules = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    private val loading = TextView(context).apply { text = "正在加载应用列表…"; visibility = GONE }
+    private val loading = context.text("正在加载应用列表…", 12f, palette.textTertiary).apply {
+        visibility = View.GONE
+    }
+    private val stateDot = context.dot(palette.textTertiary, 10)
+    private val stateTitle = context.text("", 15f, palette.textPrimary, medium = true)
+    private val statusDetail = context.text("", 12.5f, palette.textTertiary)
 
     init {
-        addView(verticalPanel(context).apply {
-            addHeading("监控应用", 26f)
-            addDescription("每个应用可单独设置拦截。名单和规则在下次开始抓包时生效。")
-            addDescription("启用任一拦截规则时，也会拦截无法确认来源的包。")
-            addSpaced(selection, 12)
-            addButton("查找并选择应用", chooseApps)
-            addSpaced(loading, 4)
-            addButton("手动输入包名", addPackage, secondary = true)
-            addSpaced(rules, 8)
+        setBackgroundColor(palette.background)
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(0, 0, 0, context.dp(28))
+        }
+        addView(root, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
-            addHeading("抓包状态")
-            addSpaced(status, 8)
-            addButton("开始抓包", start)
-            addButton("停止并保存", stop, secondary = true)
-            addButton("刷新状态", refresh, secondary = true)
-            addDescription("保存位置：下载 / SystemHelperBlocker")
+        root.addView(context.screenHeader(
+            eyebrow = "管理与配置",
+            title = "应用与规则",
+            subtitle = "选择应用、设置逐包拦截，然后开始抓包",
+            onBack = back
+        ), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
 
-            addHeading("独立 SystemHelper 拦截")
-            addDescription("只拦截 SystemHelper。此模式与抓包模式分开运行。")
-            addButton("启用独立拦截", enableLegacy, secondary = true)
-            addButton("停止独立拦截", disableLegacy, secondary = true)
+        root.addView(applicationsCard(chooseApps, addPackage), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            leftMargin = context.dp(16)
+            rightMargin = context.dp(16)
+            topMargin = -context.dp(32)
         })
+
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(context.dp(16), 0, context.dp(16), 0)
+        }
+        root.addView(body, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+
+        body.addFull(captureCard(start, stop, refresh), top = 14)
+        body.addFull(legacyCard(enableLegacy, disableLegacy), top = 14)
+        body.addFull(context.text("名单与拦截规则在下次开始抓包时生效。", 11.5f, palette.textTertiary).apply {
+            gravity = Gravity.CENTER
+        }, top = 20)
     }
 
+    private fun applicationsCard(chooseApps: () -> Unit, addPackage: () -> Unit): LinearLayout =
+        context.card(18).apply {
+            val head = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(context.sectionLabel("已选应用"), LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                ))
+                addView(countChip)
+            }
+            addView(head, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            addFull(rules, top = 6)
+            addFull(loading, top = 8)
+            addFull(context.hairline(), top = 14)
+
+            val actions = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(context.filledButton("查找并选择应用") { chooseApps() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(50), 1f).apply {
+                        marginEnd = context.dp(10)
+                    }
+                })
+                addView(context.outlineButton("输入包名") { addPackage() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(50)
+                    )
+                })
+            }
+            addFull(actions, top = 16)
+        }
+
+    private fun captureCard(start: () -> Unit, stop: () -> Unit, refresh: () -> Unit): LinearLayout =
+        context.card(18).apply {
+            val head = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(stateDot, LinearLayout.LayoutParams(context.dp(10), context.dp(10)).apply {
+                    marginEnd = context.dp(8)
+                })
+                addView(stateTitle, LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                ))
+                addView(context.linkButton("刷新") { refresh() })
+            }
+            addView(head, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            addFull(statusDetail, top = 8)
+            addFull(context.hairline(), top = 14)
+
+            val actions = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(context.filledButton("开始抓包") { start() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(50), 1f).apply {
+                        marginEnd = context.dp(10)
+                    }
+                })
+                addView(context.outlineButton("停止并保存") { stop() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(50), 1f)
+                })
+            }
+            addFull(actions, top = 16)
+            addFull(context.text("保存位置：下载 / SystemHelperBlocker", 11.5f, palette.textTertiary), top = 12)
+        }
+
+    private fun legacyCard(enable: () -> Unit, disable: () -> Unit): LinearLayout =
+        context.card(18).apply {
+            addFull(context.sectionLabel("独立拦截模式"), top = 0)
+            addFull(context.text(
+                "只丢弃 SystemHelper 的 IPv4/IPv6 流量，不影响其他应用；与抓包模式分开运行。",
+                12.5f, palette.textSecondary
+            ), top = 8)
+
+            val actions = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(context.outlineAccentButton("启用拦截") { enable() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(48), 1f).apply {
+                        marginEnd = context.dp(10)
+                    }
+                })
+                addView(context.outlineButton("停止拦截") { disable() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(48), 1f)
+                })
+            }
+            addFull(actions, top = 16)
+        }
+
     fun showSelection(names: Set<String>, blocked: Set<String>, labels: Map<String, String>) {
-        selection.text = if (names.isEmpty()) "尚未选择应用"
-        else "已选 ${names.size} 个应用"
+        val chosen = names.size
+        countChip.text = if (chosen == 0) "未选择" else "$chosen 个"
+        countChip.setTextColor(if (chosen == 0) palette.textTertiary else palette.accent)
+        countChip.background = context.shape(
+            if (chosen == 0) palette.surfaceMuted else palette.accentMuted, 8
+        )
+
         rules.removeAllViews()
-        for (name in names) {
-            rules.addSpaced(Switch(context).apply {
-                val label = labels[name]
-                text = if (label == null || label == name) "拦截 $name" else "拦截 $label\n$name"
-                minHeight = context.dp(48)
-                isChecked = name in blocked
-                setOnCheckedChangeListener { _, checked -> setBlocked(name, checked) }
-            }, 6)
+        if (names.isEmpty()) {
+            rules.addView(context.text(
+                "还没有选择应用。点击下方按钮按名称或包名搜索。", 12.5f, palette.textTertiary
+            ), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = context.dp(8) })
+            return
+        }
+        names.forEachIndexed { index, name ->
+            if (index > 0) rules.addView(context.hairline(), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, context.dp(1)
+            ))
+            val label = labels[name] ?: name
+            rules.addView(ruleRow(name, label, name in blocked))
         }
     }
 
+    private fun ruleRow(name: String, label: String, checked: Boolean): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = context.dp(56)
+            setPadding(0, context.dp(6), 0, context.dp(6))
+        }
+        val column = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(context.text(if (label == name) name else label, 14.5f, palette.textPrimary, medium = true))
+            if (label != name) {
+                addView(context.text(name, 11.5f, palette.textTertiary).apply {
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.MIDDLE
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = context.dp(3) })
+            }
+        }
+        val toggle = Switch(context).apply {
+            isChecked = checked
+            thumbTintList = ColorStateList.valueOf(
+                if (palette.dark) 0xFFE9EEF6.toInt() else 0xFFFFFFFF.toInt()
+            )
+            trackTintList = ColorStateList(
+                arrayOf(
+                    intArrayOf(android.R.attr.state_checked),
+                    intArrayOf(-android.R.attr.state_checked)
+                ),
+                intArrayOf(palette.accent, palette.trackOff)
+            )
+            contentDescription = "拦截 $name"
+            setOnCheckedChangeListener { _, value -> setBlocked(name, value) }
+        }
+        row.addView(column, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ))
+        row.addView(toggle)
+        return row
+    }
+
     fun showCatalogLoading(value: Boolean) {
-        loading.visibility = if (value) VISIBLE else GONE
+        loading.visibility = if (value) View.VISIBLE else View.GONE
     }
 
     fun showStatus(message: String) {
-        status.text = message
+        if (statusDetail.text == message) return
+        statusDetail.text = message
+        val state = captureState(message)
+        stateTitle.text = state.title
+        stateDot.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(state.color(palette))
+        }
     }
 
     fun chooseApps(apps: Map<String, String>, selected: Set<String>, save: (Set<String>) -> Unit) {
@@ -77,26 +255,60 @@ internal class MonitorView(
     }
 
     fun addPackage(accept: (String) -> Boolean) {
+        val panel = PanelDialog(context, keyboard = true)
         val input = EditText(context).apply {
             setSingleLine()
             hint = "例如 com.mobiletools.systemhelper"
+            textSize = 15f
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textTertiary)
+            background = context.shape(palette.surfaceMuted, 14, 1, palette.border)
+            setPadding(context.dp(14), context.dp(13), context.dp(14), context.dp(13))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
-        val dialog = AlertDialog.Builder(context).setTitle("添加应用包名")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("添加", null)
-            .show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            if (accept(input.text.toString())) dialog.dismiss()
-            else input.error = "请输入要监控的其他应用的包名"
+        val error = context.text("", 12f, palette.danger).apply { visibility = View.GONE }
+
+        panel.content.apply {
+            addFull(context.text("输入应用包名", 19f, palette.textPrimary, medium = true))
+            addFull(context.text("用于添加未出现在应用列表中的应用。", 13f, palette.textSecondary), top = 8)
+            addFull(input, top = 16)
+            addFull(error, top = 8)
+
+            val buttons = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(context.outlineButton("取消") { panel.dismiss() }.apply {
+                    layoutParams = LinearLayout.LayoutParams(0, context.dp(50), 1f).apply {
+                        marginEnd = context.dp(10)
+                    }
+                })
+                addView(context.filledButton("添加") {
+                    if (accept(input.text.toString())) panel.dismiss()
+                    else {
+                        error.text = "请输入已安装其他应用的包名"
+                        error.visibility = View.VISIBLE
+                    }
+                }, LinearLayout.LayoutParams(0, context.dp(50), 1f))
+            }
+            addFull(buttons, top = 20)
+        }
+        panel.show()
+        input.requestFocus()
+        input.post {
+            panel.window?.setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            )
+            context.getSystemService(InputMethodManager::class.java)
+                ?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 
     fun confirmStart(start: () -> Unit) {
-        AlertDialog.Builder(context).setTitle("开始记录通信")
-            .setMessage("将保存所选应用的原始通信包。文件可能含有明文敏感数据。抓包 VPN 可能替换现有 VPN，包括本应用的拦截模式。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("继续") { _, _ -> start() }
-            .show()
+        context.confirmDialog(
+            title = "开始记录通信",
+            message = "将保存所选应用的原始通信包，文件可能含有明文敏感数据。" +
+                "抓包 VPN 可能替换现有 VPN，包括本应用的独立拦截模式。",
+            confirmLabel = "继续",
+            onConfirm = start
+        )
     }
 }

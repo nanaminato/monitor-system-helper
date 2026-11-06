@@ -23,6 +23,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        applyChrome()
         screen = MainView(this) { startActivity(Intent(this, MonitorActivity::class.java)) }
         setContentView(screen)
     }
