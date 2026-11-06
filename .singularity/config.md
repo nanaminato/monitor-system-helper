@@ -8,7 +8,7 @@ Specification: https://github.com/nanaminato/singularity/blob/v0.1.0/SPEC.md
 
 Protocol status: Draft
 
-Adoption scope: 应用网络拦截和通信监控。入口为 `src/MainActivity.java`、`src/BlockService.java` 和 `src/MonitorActivity.java`。构建、签名和三星安装器调查暂不建模。
+Adoption scope: 应用网络拦截和通信监控。入口为 `src/MainActivity.kt`、`src/BlockService.kt` 和 `src/MonitorActivity.kt`。构建、签名和三星安装器调查暂不建模。
 
 Intent records: singularities/
 

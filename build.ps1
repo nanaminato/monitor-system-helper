@@ -2,17 +2,32 @@ param(
     [string]$Sdk = 'D:/environments/Android/Sdk',
     [string]$BuildTools = '36.0.0',
     [string]$Platform = 'android-36',
-    [string]$NdkVersion = '30.0.16248370'
+    [string]$NdkVersion = '30.0.16248370',
+    [string]$GradleHome = 'D:/environments/Android/gradle-9.7.1'
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
 Push-Location $PSScriptRoot
 try {
     $tools = Join-Path $Sdk "build-tools/$BuildTools"
     $android = Join-Path $Sdk "platforms/$Platform/android.jar"
-    New-Item -ItemType Directory build/classes,build/dex -Force | Out-Null
-    javac --release 8 -encoding UTF-8 -cp $android -d build/classes src/MainActivity.java src/BlockService.java src/MonitorActivity.java src/CaptureService.java
-    & "$tools/d8.bat" --lib $android --min-api 29 --output build/dex build/classes/local/helperblock/MainActivity.class build/classes/local/helperblock/BlockService.class build/classes/local/helperblock/MonitorActivity.class build/classes/local/helperblock/CaptureService.class
+    $d8 = Join-Path $Sdk 'cmdline-tools/latest/lib/r8-classpath.jar'
+    if (!(Test-Path -LiteralPath $d8)) {
+        throw 'Install Android SDK Command-line Tools (latest) for Kotlin-compatible D8.'
+    }
+    $compilerLib = Join-Path $GradleHome 'lib'
+    $stdlib = Join-Path $compilerLib 'kotlin-stdlib-2.4.0.jar'
+    if (!(Test-Path -LiteralPath $stdlib)) {
+        throw 'Kotlin 2.4.0 was not found. Set -GradleHome to a Gradle 9.7.1 installation.'
+    }
+    New-Item -ItemType Directory build/dex,build/tmp -Force | Out-Null
+    $env:TEMP = (Resolve-Path -LiteralPath build/tmp).Path
+    $env:TMP = $env:TEMP
+    $sources = (Get-ChildItem -LiteralPath src -Filter '*.kt' -File).FullName
+    java -cp "$compilerLib/*" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -jvm-target 1.8 -classpath "$android;$stdlib" -d build/app.jar $sources
+    java -cp $d8 com.android.tools.r8.D8 --lib $android --min-api 29 --output build/dex build/app.jar $stdlib
     $clang = Join-Path $Sdk "ndk/$NdkVersion/toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe"
     $targets = [ordered]@{
         'arm64-v8a' = 'aarch64-linux-android29'
@@ -47,5 +62,7 @@ with zipfile.ZipFile("build/base.apk", "a", zipfile.ZIP_DEFLATED) as apk:
     & "$tools/apksigner.bat" verify build/SystemHelperBlocker.apk
     Write-Output (Join-Path $PSScriptRoot 'build/SystemHelperBlocker.apk')
 } finally {
+    $env:TEMP = $previousTemp
+    $env:TMP = $previousTmp
     Pop-Location
 }

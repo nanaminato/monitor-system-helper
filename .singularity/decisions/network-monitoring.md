@@ -6,7 +6,7 @@ Status: Superseded by [D-MONITOR-002](#d-monitor-002).
 
 Upstream: [S-MONITOR-001](../singularities/network-monitoring.md#s-monitor-001)
 
-Decision: 由 [MonitorActivity](../../src/MonitorActivity.java) 保存选择，通过
+Decision: 由 [MonitorActivity](../../src/MonitorActivity.kt) 保存选择，通过
 [PCAPdroid 控制接口](https://github.com/emanuele-f/PCAPdroid/blob/master/docs/app_api.md)
 启动按应用过滤的本地 VPN，将原始通信包写入手机上的 PCAP 文件。
 
@@ -19,8 +19,8 @@ Verification: APK 构建和签名已校验。真机抓包待验证。
 
 Upstream: [S-MONITOR-001](../singularities/network-monitoring.md#s-monitor-001)
 
-Decision: [MonitorActivity](../../src/MonitorActivity.java) 保存多应用选择。
-[CaptureService](../../src/CaptureService.java) 管理本应用的按应用 VPN 和文件生命周期。
+Decision: [MonitorActivity](../../src/MonitorActivity.kt) 保存多应用选择。
+[CaptureService](../../src/CaptureService.kt) 管理本应用的按应用 VPN 和文件生命周期。
 [原生抓包循环](../../src/capture.c) 通过 APK 内的 zdtun 转发，双向记录隧道侧 IP 包。
 
 Reason: 复用双栈转发库，同时满足单 APK 安装。PCAP 由本应用写入 MediaStore 下载目录。

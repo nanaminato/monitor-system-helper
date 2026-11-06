@@ -8,10 +8,19 @@ com.mobiletools.systemhelper 的 IPv4 和 IPv6 流量。手机上需要确认 VP
 ## 构建
 
 在 Windows PowerShell 7 运行 `./build.ps1`。需要 JDK 21、Python、Android SDK
-和 Android NDK（默认 `30.0.16248370`）。SDK 路径可通过 `-Sdk` 指定，NDK 版本
-可通过 `-NdkVersion` 指定。生成的 APK 位于 `build/SystemHelperBlocker.apk`，
+和 Android NDK（默认 `30.0.16248370`），以及包含 Kotlin 2.4.0 编译器的
+Gradle 9.7.1 安装目录（`-GradleHome`）。构建脚本直接调用本地编译器，
+并使用 Android SDK Command-line Tools（latest）内的 D8（R8 9.1.29 或更高版本）。
+SDK 路径可通过 `-Sdk` 指定，NDK 版本可通过 `-NdkVersion` 指定。
+生成的 APK 位于 `build/SystemHelperBlocker.apk`，
 包含 ARM64 和 x86_64 的原生抓包库。
 build/local.p12 是本地测试签名密钥，同一安装的更新需要使用同一密钥。
+
+## 代码结构
+
+- [MainView.kt](src/MainView.kt) 和 [MonitorView.kt](src/MonitorView.kt) 负责界面和对话框。
+- Activity 负责 VPN 授权和服务调用。[MonitorSelection.kt](src/MonitorSelection.kt) 负责应用列表、包名验证和选择保存。
+- [CaptureService.kt](src/CaptureService.kt) 和 [BlockService.kt](src/BlockService.kt) 负责 VPN 生命周期。[PcapStore.kt](src/PcapStore.kt) 负责 PCAP 文件的创建与发布。
 
 ## 应用通信监控
 
