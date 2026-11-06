@@ -217,19 +217,6 @@ internal fun Context.outlineButton(label: String, action: () -> Unit): TextView 
     }
 }
 
-internal fun Context.outlineAccentButton(label: String, action: () -> Unit): TextView {
-    val p = palette
-    return text(label, 15f, p.accent, medium = true).apply {
-        gravity = Gravity.CENTER
-        background = buttonBackground(p.accentMuted, p.accent, 16, 0, if (p.dark) 0x33FFFFFF else 0x262F63E8)
-        minHeight = dp(48)
-        setPadding(dp(16), dp(13), dp(16), dp(13))
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { action() }
-    }
-}
-
 internal fun Context.linkButton(label: String, action: () -> Unit): TextView {
     val p = palette
     return text(label, 13f, p.accent, medium = true).apply {

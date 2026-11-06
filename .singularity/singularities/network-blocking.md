@@ -8,4 +8,4 @@ Statement: 网络拦截只针对当前 Android 用户下的 `com.mobiletools.sys
 
 Reason: 拦截对象和流量范围决定工具对设备上其他应用的影响，调整范围需要明确的产品意图。
 
-Evidence: [项目说明](../../README.md) 记载了目标范围，[BlockService.onStartCommand](../../src/BlockService.kt) 配置了单包允许列表及 IPv4、IPv6 默认路由。真机拦截效果仍待验证。
+Evidence: 提交 `8e4f200` 中的 `BlockService.onStartCommand` 曾为独立模式配置单包允许列表及 IPv4、IPv6 默认路由。当前行为见 [S-MONITOR-002](network-monitoring.md#s-monitor-002)。

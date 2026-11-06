@@ -1,7 +1,7 @@
 # SystemHelper Blocker
 
-Android 本地 VPN 工具。启用后丢弃当前 Android 用户下
-com.mobiletools.systemhelper 的 IPv4 和 IPv6 流量。手机上需要确认 VPN 授权。
+Android 本地 VPN 工具，可记录所选应用的 IPv4 和 IPv6 流量，并按应用配置丢弃。
+首次启动抓包时需要确认 VPN 授权。
 
 项目意图和实现决策从 [Singularity 入口](.singularity/README.md) 查阅。
 
@@ -37,7 +37,7 @@ build/local.p12 是本地测试签名密钥，同一安装的更新需要使用�
   不使用 XML 资源，并跟随系统深色模式。[RequestListView.kt](src/RequestListView.kt) 与
   [AppPicker.kt](src/AppPicker.kt) 负责请求列表行和应用选择对话框。
 - Activity 负责 VPN 授权和服务调用。[MonitorSelection.kt](src/MonitorSelection.kt) 负责应用列表、包名验证和选择保存。
-- [CaptureService.kt](src/CaptureService.kt) 和 [BlockService.kt](src/BlockService.kt) 负责 VPN 生命周期。[PcapStore.kt](src/PcapStore.kt) 负责 PCAP 文件的创建与发布。
+- [CaptureService.kt](src/CaptureService.kt) 负责 VPN 生命周期。[PcapStore.kt](src/PcapStore.kt) 负责 PCAP 文件的创建与发布。
 
 ## 应用通信监控
 
@@ -61,15 +61,14 @@ build/local.p12 是本地测试签名密钥，同一安装的更新需要使用�
 PCAP 保存 VPN 隧道两端看到的 IPv4/IPv6 包，包含时间戳、协议头和原始载荷。
 明文可直接分析，HTTPS 等加密载荷保持密文。接收方向的 IP 包由转发引擎
 从返回数据重建，因此包头和分段可能与物理网卡上看到的不同。Android 按 UID
-应用 VPN 过滤，共享 UID 的应用可能一起被捕获。监控与原有拦截模式需分开运行。
+应用 VPN 过滤，共享 UID 的应用可能一起被捕获。
 
 目前已通过 APK 构建和签名校验。多应用过滤、屏幕关闭后的后台记录及真机联网行为待验证。
 
 ## 调查背景
 
-项目用于限制 `com.mobiletools.systemhelper` 自身的网络通信。VPN 只将当前
-Android 用户下该包的 IPv4 和 IPv6 流量导入无转发路径的隧道。目标包仍可在
-本地运行和访问已有权限允许的数据。启用时可能替换当前 VPN，重启后需手动启用。
+项目最初用于调查并限制 `com.mobiletools.systemhelper` 的网络通信。现在可在管理页
+为该包开启「丢弃」，在同一抓包会话中记录其出站包并阻止转发。
 
 ### SystemHelper 的线索
 

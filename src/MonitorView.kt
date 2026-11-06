@@ -23,9 +23,7 @@ internal class MonitorView(
     stop: () -> Unit,
     refresh: () -> Unit,
     private val setBlocked: (String, Boolean) -> Unit,
-    private val removeApp: (String) -> Unit,
-    enableLegacy: () -> Unit,
-    disableLegacy: () -> Unit
+    private val removeApp: (String) -> Unit
 ) : ScrollView(context) {
     private val palette = context.palette
     private val countChip = context.chip("未选择", palette.textTertiary, palette.surfaceMuted)
@@ -73,7 +71,6 @@ internal class MonitorView(
         ))
 
         body.addFull(captureCard(start, stop, refresh), top = 14)
-        body.addFull(legacyCard(enableLegacy, disableLegacy), top = 14)
         body.addFull(context.text("保存选择后自动抓包，首次需要 VPN 授权。规则变更会保存当前 PCAP 并重新开始抓包。", 11.5f, palette.textTertiary).apply {
             gravity = Gravity.CENTER
         }, top = 20)
@@ -145,28 +142,6 @@ internal class MonitorView(
             }
             addFull(actions, top = 16)
             addFull(context.text("保存位置：下载 / SystemHelperBlocker", 11.5f, palette.textTertiary), top = 12)
-        }
-
-    private fun legacyCard(enable: () -> Unit, disable: () -> Unit): LinearLayout =
-        context.card(18).apply {
-            addFull(context.sectionLabel("独立拦截模式"), top = 0)
-            addFull(context.text(
-                "只丢弃 SystemHelper 的 IPv4/IPv6 流量，不影响其他应用；与抓包模式分开运行。",
-                12.5f, palette.textSecondary
-            ), top = 8)
-
-            val actions = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                addView(context.outlineAccentButton("启用拦截") { enable() }.apply {
-                    layoutParams = LinearLayout.LayoutParams(0, context.dp(48), 1f).apply {
-                        marginEnd = context.dp(10)
-                    }
-                })
-                addView(context.outlineButton("停止拦截") { disable() }.apply {
-                    layoutParams = LinearLayout.LayoutParams(0, context.dp(48), 1f)
-                })
-            }
-            addFull(actions, top = 16)
         }
 
     fun showSelection(names: Set<String>, blocked: Set<String>, labels: Map<String, String>) {
@@ -310,7 +285,7 @@ internal class MonitorView(
         context.confirmDialog(
             title = "开始记录通信",
             message = "将保存所选应用的原始通信包，文件可能含有明文敏感数据。" +
-                "抓包 VPN 可能替换现有 VPN，包括本应用的独立拦截模式。",
+                "抓包 VPN 可能替换现有 VPN。",
             confirmLabel = "继续",
             onConfirm = start
         )

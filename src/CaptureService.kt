@@ -54,7 +54,6 @@ class CaptureService : VpnService() {
             }
             classifier = RequestClassifier(getSystemService(ConnectivityManager::class.java), rules)
             val tunnel = establishTunnel(packages)
-            stopService(Intent(this, BlockService::class.java))
 
             busy = true
             running = true

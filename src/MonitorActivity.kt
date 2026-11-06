@@ -24,9 +24,7 @@ class MonitorActivity : Activity() {
             stop = ::stopCapture,
             refresh = ::refreshStatus,
             setBlocked = ::setBlocked,
-            removeApp = ::removeApp,
-            enableLegacy = ::requestLegacyVpn,
-            disableLegacy = { stopService(Intent(this, BlockService::class.java)) }
+            removeApp = ::removeApp
         )
         setContentView(screen)
         showRules()
@@ -121,7 +119,6 @@ class MonitorActivity : Activity() {
 
     override fun onActivityResult(request: Int, result: Int, data: Intent?) {
         super.onActivityResult(request, result, data)
-        if (request == LEGACY_CONSENT && result == RESULT_OK) enableLegacy()
         if (request != VPN_CONSENT) return
         if (result == RESULT_OK) startCapture() else screen.showStatus("未授予 VPN 权限。")
     }
@@ -141,21 +138,7 @@ class MonitorActivity : Activity() {
         }
     }
 
-    private fun requestLegacyVpn() {
-        if (CaptureService.busy) {
-            screen.showStatus("请先停止通信抓包。")
-            return
-        }
-        val consent = VpnService.prepare(this)
-        if (consent == null) enableLegacy() else startActivityForResult(consent, LEGACY_CONSENT)
-    }
-
-    private fun enableLegacy() {
-        if (!CaptureService.busy) startForegroundService(Intent(this, BlockService::class.java))
-    }
-
     private companion object {
         const val VPN_CONSENT = 10
-        const val LEGACY_CONSENT = 11
     }
 }
