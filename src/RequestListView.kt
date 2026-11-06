@@ -167,7 +167,7 @@ private class PacketRow(context: Context) : LinearLayout(context) {
         endpoint.text = source.endpoint
         val label = packet.http?.let { "${it.title} · 点按查看" }
             ?: if (source.blocked) "拦截" else "放行"
-        meta.text = "$time · $label"
+        meta.text = if (source.inferred) "$time · $label · 按 VPN 范围推定" else "$time · $label"
         size.text = bytes(packet.bytes)
     }
 
@@ -182,6 +182,9 @@ internal fun showHttpPreview(context: Context, packet: RequestPacket): Boolean {
     val preview = packet.http ?: return false
     val content = context.card(16).apply {
         addFull(context.text(packet.source.endpoint, 13f, context.palette.textSecondary, mono = true))
+        if (packet.source.inferred) {
+            addFull(context.text("应用归属按 VPN 的唯一选中应用推定。", 12f, context.palette.textSecondary), top = 8)
+        }
         addFull(context.text("此处显示单个 TCP 包的明文片段，最多 2 KB。", 12f, context.palette.textSecondary), top = 8)
         addFull(context.text(preview.text, 13f, context.palette.textPrimary, mono = true).apply {
             setTextIsSelectable(true)

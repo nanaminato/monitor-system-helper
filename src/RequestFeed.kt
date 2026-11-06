@@ -11,7 +11,8 @@ internal data class RequestSource(
     val app: AppRule?,
     val endpoint: String,
     val protocol: String,
-    val blocked: Boolean
+    val blocked: Boolean,
+    val inferred: Boolean = false
 )
 
 internal data class HttpPreview(val response: Boolean, val text: String) {
@@ -48,7 +49,9 @@ internal class RequestClassifier(
     private val rules: Map<Int, AppRule>
 ) {
     val blockUnknown = rules.values.any { it.blocked }
-    private val unknown = RequestSource(null, "未解析目标", "IP", blockUnknown)
+    // Shared-UID groups are ambiguous even when there is only one UID rule.
+    private val onlyApp = rules.values.singleOrNull()?.takeIf { it.packages.size == 1 }
+    private val unknown = RequestSource(onlyApp, "未解析目标", "IP", blockUnknown, onlyApp != null)
     private val flows = arrayOfNulls<RequestSource>(1024)
 
     fun classify(slot: Int, protocol: Int, source: ByteArray, sourcePort: Int,
@@ -64,7 +67,8 @@ internal class RequestClassifier(
                 null
             }
         } else null
-        val app = rules[uid]
+        val inferredApp = onlyApp.takeIf { uid == null || uid < 0 }
+        val app = rules[uid] ?: inferredApp
         val address = remote.hostAddress
         val endpoint = if (destinationPort == 0) address
             else if (destination.size == 16) "[$address]:$destinationPort" else "$address:$destinationPort"
@@ -74,7 +78,7 @@ internal class RequestClassifier(
             else -> "IP/$protocol"
         }
         val blocked = app?.blocked ?: blockUnknown
-        flows[slot] = RequestSource(app, endpoint.orEmpty(), transport, blocked)
+        flows[slot] = RequestSource(app, endpoint.orEmpty(), transport, blocked, inferredApp != null)
         return blocked
     }
 
