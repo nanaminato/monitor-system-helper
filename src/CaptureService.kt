@@ -14,14 +14,24 @@ class CaptureService : VpnService() {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var running = false
     private lateinit var classifier: RequestClassifier
+    private var pendingSession: Intent? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null || intent.action == STOP) {
             stopCapture()
             return START_NOT_STICKY
         }
-        if (busy) return START_NOT_STICKY
+        if (busy) {
+            pendingSession = intent
+            status = "正在保存当前抓包并应用新规则。"
+            running = false
+        } else {
+            startSession(intent)
+        }
+        return START_NOT_STICKY
+    }
 
+    private fun startSession(intent: Intent) {
         startForeground(2, captureNotification(this))
         try {
             val packages = intent.getStringArrayListExtra(PACKAGES).orEmpty()
@@ -58,7 +68,6 @@ class CaptureService : VpnService() {
         } catch (error: UnsatisfiedLinkError) {
             failStart(error)
         }
-        return START_NOT_STICKY
     }
 
     private fun establishTunnel(packages: List<String>): ParcelFileDescriptor {
@@ -115,7 +124,9 @@ class CaptureService : VpnService() {
             running = false
             busy = false
             status = result
-            stopSelf()
+            val next = pendingSession
+            pendingSession = null
+            if (next == null) stopSelf() else startSession(next)
         }
     }
 
@@ -131,6 +142,7 @@ class CaptureService : VpnService() {
     private external fun capture(tunnel: Int, output: Int, blockUnknown: Boolean): Int
 
     private fun stopCapture() {
+        pendingSession = null
         if (busy) status = "正在停止抓包并保存文件。" else stopSelf()
         running = false
     }
@@ -141,6 +153,7 @@ class CaptureService : VpnService() {
     }
 
     override fun onDestroy() {
+        pendingSession = null
         running = false
         super.onDestroy()
     }

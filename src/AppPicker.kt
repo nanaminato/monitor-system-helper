@@ -111,7 +111,7 @@ internal fun showAppPicker(
                     marginEnd = context.dp(10)
                 }
             })
-            addView(context.filledButton("保存选择") {
+            addView(context.filledButton("保存并抓包") {
                 save(chosen.toSet())
                 panel.dismiss()
             }, LinearLayout.LayoutParams(0, context.dp(50), 1f))

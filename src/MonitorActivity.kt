@@ -23,7 +23,8 @@ class MonitorActivity : Activity() {
             start = ::checkStart,
             stop = ::stopCapture,
             refresh = ::refreshStatus,
-            setBlocked = selection::setBlocked,
+            setBlocked = ::setBlocked,
+            removeApp = ::removeApp,
             enableLegacy = ::requestLegacyVpn,
             disableLegacy = { stopService(Intent(this, BlockService::class.java)) }
         )
@@ -63,6 +64,7 @@ class MonitorActivity : Activity() {
         screen.chooseApps(apps + names.filterNot(apps::containsKey).associateWith { it }, names) {
             selection.replace(it)
             showRules()
+            if (it != names || !CaptureService.busy) applySelection(startIfIdle = true)
         }
     }
 
@@ -72,9 +74,31 @@ class MonitorActivity : Activity() {
 
     private fun addPackage() {
         screen.addPackage { rawName ->
+            val before = selection.packages
             val accepted = selection.add(rawName)
-            if (accepted) showRules()
+            if (accepted) {
+                showRules()
+                if (selection.packages != before) applySelection(startIfIdle = true)
+            }
             accepted
+        }
+    }
+
+    private fun removeApp(name: String) {
+        selection.replace(selection.packages - name)
+        showRules()
+        applySelection(startIfIdle = false)
+    }
+
+    private fun setBlocked(name: String, blocked: Boolean) {
+        selection.setBlocked(name, blocked)
+        applySelection(startIfIdle = false)
+    }
+
+    private fun applySelection(startIfIdle: Boolean) {
+        when {
+            selection.packages.isEmpty() -> stopCapture()
+            CaptureService.busy || startIfIdle -> requestVpn()
         }
     }
 
@@ -103,11 +127,12 @@ class MonitorActivity : Activity() {
     }
 
     private fun startCapture() {
+        if (selection.packages.isEmpty()) return
         val intent = Intent(this, CaptureService::class.java)
             .putStringArrayListExtra(CaptureService.PACKAGES, ArrayList(selection.packages))
             .putStringArrayListExtra(CaptureService.BLOCKED_PACKAGES, ArrayList(selection.blocked))
         startForegroundService(intent)
-        screen.showStatus("正在启动抓包。")
+        screen.showStatus(if (CaptureService.busy) "正在保存当前抓包并应用新规则。" else "正在启动抓包。")
     }
 
     private fun stopCapture() {

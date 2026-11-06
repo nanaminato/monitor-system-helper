@@ -23,6 +23,7 @@ internal class MonitorView(
     stop: () -> Unit,
     refresh: () -> Unit,
     private val setBlocked: (String, Boolean) -> Unit,
+    private val removeApp: (String) -> Unit,
     enableLegacy: () -> Unit,
     disableLegacy: () -> Unit
 ) : ScrollView(context) {
@@ -49,7 +50,7 @@ internal class MonitorView(
         root.addView(context.screenHeader(
             eyebrow = "管理与配置",
             title = "应用与规则",
-            subtitle = "选择应用、设置逐包拦截，然后开始抓包",
+            subtitle = "选择应用后开始抓包，可按应用设置丢弃",
             onBack = back
         ), LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -73,7 +74,7 @@ internal class MonitorView(
 
         body.addFull(captureCard(start, stop, refresh), top = 14)
         body.addFull(legacyCard(enableLegacy, disableLegacy), top = 14)
-        body.addFull(context.text("名单与拦截规则在下次开始抓包时生效。", 11.5f, palette.textTertiary).apply {
+        body.addFull(context.text("保存选择后自动抓包，首次需要 VPN 授权。规则变更会保存当前 PCAP 并重新开始抓包。", 11.5f, palette.textTertiary).apply {
             gravity = Gravity.CENTER
         }, top = 20)
     }
@@ -214,6 +215,8 @@ internal class MonitorView(
             }
         }
         val toggle = Switch(context).apply {
+            text = "丢弃"
+            setTextColor(palette.textSecondary)
             isChecked = checked
             thumbTintList = ColorStateList.valueOf(
                 if (palette.dark) 0xFFE9EEF6.toInt() else 0xFFFFFFFF.toInt()
@@ -225,13 +228,14 @@ internal class MonitorView(
                 ),
                 intArrayOf(palette.accent, palette.trackOff)
             )
-            contentDescription = "拦截 $name"
+            contentDescription = "丢弃 $name 的流量"
             setOnCheckedChangeListener { _, value -> setBlocked(name, value) }
         }
         row.addView(column, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
         ))
         row.addView(toggle)
+        row.addView(context.linkButton("移除") { removeApp(name) })
         return row
     }
 
