@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.widget.EditText
 import android.widget.ScrollView
+import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 
 internal class MonitorView(
@@ -12,25 +14,58 @@ internal class MonitorView(
     addPackage: () -> Unit,
     start: () -> Unit,
     stop: () -> Unit,
-    refresh: () -> Unit
+    refresh: () -> Unit,
+    private val setBlocked: (String, Boolean) -> Unit,
+    enableLegacy: () -> Unit,
+    disableLegacy: () -> Unit
 ) : ScrollView(context) {
     private val selection = TextView(context)
     private val status = TextView(context)
+    private val rules = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private val loading = TextView(context).apply { text = "正在加载应用列表…"; visibility = GONE }
 
     init {
         addView(verticalPanel(context).apply {
-            addView(selection)
-            addButton("选择应用", chooseApps)
-            addButton("按包名添加", addPackage)
-            addView(status)
+            addHeading("监控应用", 26f)
+            addDescription("每个应用可单独设置拦截。名单和规则在下次开始抓包时生效。")
+            addDescription("启用任一拦截规则时，也会拦截无法确认来源的包。")
+            addSpaced(selection, 12)
+            addButton("查找并选择应用", chooseApps)
+            addSpaced(loading, 4)
+            addButton("手动输入包名", addPackage, secondary = true)
+            addSpaced(rules, 8)
+
+            addHeading("抓包状态")
+            addSpaced(status, 8)
             addButton("开始抓包", start)
-            addButton("停止抓包", stop)
-            addButton("刷新抓包状态", refresh)
+            addButton("停止并保存", stop, secondary = true)
+            addButton("刷新状态", refresh, secondary = true)
+            addDescription("保存位置：下载 / SystemHelperBlocker")
+
+            addHeading("独立 SystemHelper 拦截")
+            addDescription("只拦截 SystemHelper。此模式与抓包模式分开运行。")
+            addButton("启用独立拦截", enableLegacy, secondary = true)
+            addButton("停止独立拦截", disableLegacy, secondary = true)
         })
     }
 
-    fun showSelection(names: Set<String>) {
-        selection.text = if (names.isEmpty()) "尚未选择应用" else names.joinToString("\n", "已选择\n")
+    fun showSelection(names: Set<String>, blocked: Set<String>, labels: Map<String, String>) {
+        selection.text = if (names.isEmpty()) "尚未选择应用"
+        else "已选 ${names.size} 个应用"
+        rules.removeAllViews()
+        for (name in names) {
+            rules.addSpaced(Switch(context).apply {
+                val label = labels[name]
+                text = if (label == null || label == name) "拦截 $name" else "拦截 $label\n$name"
+                minHeight = context.dp(48)
+                isChecked = name in blocked
+                setOnCheckedChangeListener { _, checked -> setBlocked(name, checked) }
+            }, 6)
+        }
+    }
+
+    fun showCatalogLoading(value: Boolean) {
+        loading.visibility = if (value) VISIBLE else GONE
     }
 
     fun showStatus(message: String) {
@@ -38,16 +73,7 @@ internal class MonitorView(
     }
 
     fun chooseApps(apps: Map<String, String>, selected: Set<String>, save: (Set<String>) -> Unit) {
-        val names = apps.keys.toList()
-        val labels = names.map { "${apps.getValue(it)}\n$it" }.toTypedArray()
-        val checked = BooleanArray(names.size) { names[it] in selected }
-        AlertDialog.Builder(context).setTitle("选择要监控的应用")
-            .setMultiChoiceItems(labels, checked) { _, index, selectedNow -> checked[index] = selectedNow }
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ ->
-                save(names.filterIndexed { index, _ -> checked[index] }.toSet())
-            }
-            .show()
+        showAppPicker(context, apps, selected, save)
     }
 
     fun addPackage(accept: (String) -> Boolean) {

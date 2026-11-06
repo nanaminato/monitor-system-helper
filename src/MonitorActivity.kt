@@ -8,10 +8,12 @@ import android.os.Bundle
 class MonitorActivity : Activity() {
     private lateinit var selection: MonitorSelection
     private lateinit var screen: MonitorView
+    private var appCatalog: Map<String, String>? = null
+    private var loadingApps = false
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        title = "应用通信监控"
+        title = "管理应用与拦截规则"
         selection = MonitorSelection(this)
         screen = MonitorView(
             this,
@@ -19,10 +21,13 @@ class MonitorActivity : Activity() {
             addPackage = ::addPackage,
             start = ::checkStart,
             stop = ::stopCapture,
-            refresh = ::refreshStatus
+            refresh = ::refreshStatus,
+            setBlocked = selection::setBlocked,
+            enableLegacy = ::requestLegacyVpn,
+            disableLegacy = { stopService(Intent(this, BlockService::class.java)) }
         )
         setContentView(screen)
-        screen.showSelection(selection.packages)
+        showRules()
     }
 
     override fun onResume() {
@@ -31,16 +36,43 @@ class MonitorActivity : Activity() {
     }
 
     private fun chooseApps() {
-        screen.chooseApps(selection.availableApps(), selection.packages) { names ->
-            selection.replace(names)
-            screen.showSelection(selection.packages)
+        appCatalog?.let {
+            showPicker(it)
+            return
         }
+        if (loadingApps) return
+        loadingApps = true
+        screen.showCatalogLoading(true)
+        Thread({
+            val apps = runCatching { selection.availableApps() }
+            runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                loadingApps = false
+                screen.showCatalogLoading(false)
+                apps.onSuccess {
+                    appCatalog = it
+                    showPicker(it)
+                }.onFailure { screen.showStatus("无法加载应用列表。") }
+            }
+        }, "app-catalog").start()
+    }
+
+    private fun showPicker(apps: Map<String, String>) {
+        val names = selection.packages
+        screen.chooseApps(apps + names.filterNot(apps::containsKey).associateWith { it }, names) {
+            selection.replace(it)
+            showRules()
+        }
+    }
+
+    private fun showRules() {
+        screen.showSelection(selection.packages, selection.blocked, appCatalog.orEmpty())
     }
 
     private fun addPackage() {
         screen.addPackage { rawName ->
             val accepted = selection.add(rawName)
-            if (accepted) screen.showSelection(selection.packages)
+            if (accepted) showRules()
             accepted
         }
     }
@@ -64,6 +96,7 @@ class MonitorActivity : Activity() {
 
     override fun onActivityResult(request: Int, result: Int, data: Intent?) {
         super.onActivityResult(request, result, data)
+        if (request == LEGACY_CONSENT && result == RESULT_OK) enableLegacy()
         if (request != VPN_CONSENT) return
         if (result == RESULT_OK) startCapture() else screen.showStatus("未授予 VPN 权限。")
     }
@@ -71,6 +104,7 @@ class MonitorActivity : Activity() {
     private fun startCapture() {
         val intent = Intent(this, CaptureService::class.java)
             .putStringArrayListExtra(CaptureService.PACKAGES, ArrayList(selection.packages))
+            .putStringArrayListExtra(CaptureService.BLOCKED_PACKAGES, ArrayList(selection.blocked))
         startForegroundService(intent)
         screen.showStatus("正在启动抓包。")
     }
@@ -81,7 +115,21 @@ class MonitorActivity : Activity() {
         }
     }
 
+    private fun requestLegacyVpn() {
+        if (CaptureService.busy) {
+            screen.showStatus("请先停止通信抓包。")
+            return
+        }
+        val consent = VpnService.prepare(this)
+        if (consent == null) enableLegacy() else startActivityForResult(consent, LEGACY_CONSENT)
+    }
+
+    private fun enableLegacy() {
+        if (!CaptureService.busy) startForegroundService(Intent(this, BlockService::class.java))
+    }
+
     private companion object {
         const val VPN_CONSENT = 10
+        const val LEGACY_CONSENT = 11
     }
 }

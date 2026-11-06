@@ -13,6 +13,7 @@ import java.io.IOException
 class CaptureService : VpnService() {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var running = false
+    private lateinit var classifier: RequestClassifier
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null || intent.action == STOP) {
@@ -28,12 +29,27 @@ class CaptureService : VpnService() {
                 "请选择至少一个其他应用。"
             }
             System.loadLibrary("capture")
+            val blocked = intent.getStringArrayListExtra(BLOCKED_PACKAGES).orEmpty().toSet()
+            val apps = packages.map { name ->
+                try {
+                    packageManager.getApplicationInfo(name, 0)
+                } catch (error: PackageManager.NameNotFoundException) {
+                    throw IllegalArgumentException("应用未安装或不可用：$name", error)
+                }
+            }
+            val rules = apps.groupBy { it.uid }.mapValues { (uid, entries) ->
+                val names = entries.map { it.packageName }
+                val title = entries.joinToString(" / ") { it.loadLabel(packageManager).toString() }
+                AppRule(uid, title, names, names.any { it in blocked })
+            }
+            classifier = RequestClassifier(getSystemService(ConnectivityManager::class.java), rules)
             val tunnel = establishTunnel(packages)
             stopService(Intent(this, BlockService::class.java))
 
             busy = true
             running = true
             status = "正在初始化抓包。"
+            RequestFeed.clear()
             Thread({ record(tunnel) }, "packet-capture").start()
         } catch (error: IOException) {
             failStart(error)
@@ -82,7 +98,7 @@ class CaptureService : VpnService() {
                     main.post {
                         if (running) status = "正在后台抓包。停止后可在下载目录查看 PCAP。"
                     }
-                    if (capture(input.fd, output) != 0) {
+                    if (capture(input.fd, output, classifier.blockUnknown) != 0) {
                         throw IOException("隧道或 PCAP 写入出错。")
                     }
                 }
@@ -106,7 +122,13 @@ class CaptureService : VpnService() {
     // Called by capture.c on the packet worker thread.
     private fun shouldCapture(): Boolean = running
 
-    private external fun capture(tunnel: Int, output: Int): Int
+    private fun classifyFlow(slot: Int, protocol: Int, source: ByteArray, sourcePort: Int,
+                             destination: ByteArray, destinationPort: Int): Boolean =
+        classifier.classify(slot, protocol, source, sourcePort, destination, destinationPort)
+
+    private fun observePacket(slot: Int, bytes: Int) = classifier.observe(slot, bytes)
+
+    private external fun capture(tunnel: Int, output: Int, blockUnknown: Boolean): Int
 
     private fun stopCapture() {
         if (busy) status = "正在停止抓包并保存文件。" else stopSelf()
@@ -126,6 +148,7 @@ class CaptureService : VpnService() {
     companion object {
         internal const val STOP = "local.helperblock.STOP_CAPTURE"
         internal const val PACKAGES = "packages"
+        internal const val BLOCKED_PACKAGES = "blocked_packages"
         internal var busy = false
             private set
         internal var status = "当前没有运行抓包。"

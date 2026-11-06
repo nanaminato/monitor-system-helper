@@ -39,7 +39,7 @@ try {
         & $clang "--target=$($targets[$abi])" -shared -fPIC -O2 -DNO_DEBUG '-Wl,-soname,libzdtun.so' '-Wl,-z,max-page-size=16384' third_party/zdtun/zdtun.c third_party/zdtun/utils.c -o "$lib/libzdtun.so"
         & $clang "--target=$($targets[$abi])" -shared -fPIC -O2 -DNO_DEBUG -Ithird_party/zdtun '-Wl,-z,max-page-size=16384' '-Wl,--no-undefined' src/capture.c "-L$lib" -lzdtun -o "$lib/libcapture.so"
     }
-    & "$tools/aapt2.exe" link -I $android --manifest src/AndroidManifest.xml -o build/base.apk
+    & "$tools/aapt2.exe" link -I $android --manifest src/AndroidManifest.xml --min-sdk-version 29 --target-sdk-version 34 --version-code 1 --version-name 0.1.0 -o build/base.apk
     @'
 from pathlib import Path
 import sys

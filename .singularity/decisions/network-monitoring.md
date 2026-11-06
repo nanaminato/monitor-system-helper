@@ -30,3 +30,14 @@ Impact: 替换外部抓包控制接口，更新 VPN 服务声明、原生库构�
 
 Verification: ARM64 与 x86_64 原生库已随 APK 构建并通过签名校验。
 本机 ADB 服务无法启动，真机抓包和后台持续运行待验证。
+
+## D-MONITOR-003
+
+Upstream: [S-MONITOR-002](../singularities/network-monitoring.md#s-monitor-002)
+
+Decision: 在出站包转发前解析五元组，通过 Android VPN 的连接归属查询映射到 UID。
+管理页保存逐包名规则，抓包会话启动时按 UID 固定规则。共享 UID 使用更严格的规则。
+存在拦截规则时，无法确认来源的包也丢弃，避免绕过拦截。此类包单独分组。
+
+Reason: 按五元组短时缓存归属，应用目录在后台按需加载。首页分批刷新有界内存中的
+最新包摘要，完整记录仍写入 PCAP。

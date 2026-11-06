@@ -5,7 +5,21 @@ com.mobiletools.systemhelper 的 IPv4 和 IPv6 流量。手机上需要确认 VP
 
 项目意图和实现决策从 [Singularity 入口](.singularity/README.md) 查阅。
 
-## 构建
+## 在 Android Studio 运行
+
+1. 用 **File → Open** 打开本项目根目录（包含 `settings.gradle.kts`），等待 Gradle 同步。
+   如果此前打开的是旧的 Java 模块，可在 Gradle 工具窗口选择 **Link Gradle Project**
+   并指向根目录的 `settings.gradle.kts`。
+2. 在 SDK Manager 安装 Android SDK Platform 36 和 NDK `30.0.16248370`。
+   Gradle JDK 可选择 JDK 21。项目使用 Gradle Wrapper，首次同步会下载所需依赖。
+3. 在工具栏选择 **app** 和已开启 USB 调试的手机，然后点击 **Run**。
+   如果缺少运行配置，在 **Run → Edit Configurations** 添加 **Android App**，模块选择 **app**。
+
+也可以运行 `./gradlew.bat :app:assembleDebug`，调试 APK 位于
+`app/build/outputs/apk/debug/app-debug.apk`。若已有 `build/local.p12`，Gradle 调试
+版本沿用该本地测试签名，可覆盖使用同一密钥安装的旧版本。
+
+## PowerShell 构建
 
 在 Windows PowerShell 7 运行 `./build.ps1`。需要 JDK 21、Python、Android SDK
 和 Android NDK（默认 `30.0.16248370`），以及包含 Kotlin 2.4.0 编译器的
@@ -24,10 +38,15 @@ build/local.p12 是本地测试签名密钥，同一安装的更新需要使用�
 
 ## 应用通信监控
 
-在首页打开「应用通信监控」，勾选一个或多个应用。没有启动图标的应用可按包名添加。
+首页按应用分组显示最近 500 个出站包，可展开查看目标地址、协议、时间和大小。
+在首页打开「管理应用与拦截规则」，使用「查找并选择应用」按应用名称或包名搜索。
+已选应用会排在列表前面。可以在不同搜索结果中连续勾选，最后一次性保存。
+也可以手动输入包名。管理页可逐应用启用拦截，关闭拦截时抓包并尝试转发。
 点击「开始抓包」并完成 Android VPN 授权后，本应用的前台服务会在后台转发并记录通信。
 转发库 [zdtun](third_party/zdtun/README.md) 已打包进 APK。选中列表保存在本应用，
-下次启动抓包时生效。
+名单和拦截规则在下次启动抓包时生效。拦截发生在转发前，出站包仍会写入 PCAP。
+若开启任一拦截规则，无法通过 Android 确认归属的包也会被拦截，并单独分组。
+共享 UID 的所选应用合用一组，任一应用设置拦截时，该组应用都会被拦截。
 
 可在界面或抓包通知中停止抓包。停止并保存后，在手机文件管理器打开
 `Download/SystemHelperBlocker/SystemHelperBlocker-*.pcap` 查看或导出记录。

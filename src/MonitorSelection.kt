@@ -8,6 +8,14 @@ internal class MonitorSelection(private val context: Context) {
     val packages: Set<String>
         get() = preferences.getStringSet("packages", emptySet()).orEmpty().toSortedSet()
 
+    val blocked: Set<String>
+        get() = preferences.getStringSet("blocked_packages", emptySet()).orEmpty()
+
+    fun setBlocked(name: String, enabled: Boolean) {
+        val updated = if (enabled) blocked + name else blocked - name
+        preferences.edit().putStringSet("blocked_packages", updated).apply()
+    }
+
     fun availableApps(): Map<String, String> {
         val manager = context.packageManager
         val apps = sortedMapOf<String, String>()
@@ -20,7 +28,8 @@ internal class MonitorSelection(private val context: Context) {
     }
 
     fun replace(names: Set<String>) {
-        preferences.edit().putStringSet("packages", names.toSet()).apply()
+        preferences.edit().putStringSet("packages", names.toSet())
+            .putStringSet("blocked_packages", blocked intersect names).apply()
     }
 
     fun add(rawName: String): Boolean {

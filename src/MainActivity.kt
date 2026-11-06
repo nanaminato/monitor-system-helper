@@ -2,40 +2,38 @@ package local.helperblock
 
 import android.app.Activity
 import android.content.Intent
-import android.net.VpnService
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
-import android.widget.Toast
 
 class MainActivity : Activity() {
+    private val main = Handler(Looper.getMainLooper())
+    private lateinit var screen: MainView
+    private var revision = -1L
+    private val refresh = object : Runnable {
+        override fun run() {
+            screen.showStatus(CaptureService.status)
+            RequestFeed.snapshot(revision)?.let { (version, packets) ->
+                revision = version
+                screen.showPackets(packets)
+            }
+            main.postDelayed(this, 750)
+        }
+    }
+
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
-        setContentView(mainView(
-            this,
-            enable = ::requestVpn,
-            disable = { stopService(Intent(this, BlockService::class.java)) },
-            monitor = { startActivity(Intent(this, MonitorActivity::class.java)) }
-        ))
+        screen = MainView(this) { startActivity(Intent(this, MonitorActivity::class.java)) }
+        setContentView(screen)
     }
 
-    private fun requestVpn() {
-        val consent = VpnService.prepare(this)
-        if (consent == null) enableBlocker() else startActivityForResult(consent, VPN_CONSENT)
+    override fun onStart() {
+        super.onStart()
+        refresh.run()
     }
 
-    override fun onActivityResult(request: Int, result: Int, data: Intent?) {
-        super.onActivityResult(request, result, data)
-        if (request == VPN_CONSENT && result == RESULT_OK) enableBlocker()
-    }
-
-    private fun enableBlocker() {
-        if (CaptureService.busy) {
-            Toast.makeText(this, "请先停止通信抓包。", Toast.LENGTH_SHORT).show()
-            return
-        }
-        startForegroundService(Intent(this, BlockService::class.java))
-    }
-
-    private companion object {
-        const val VPN_CONSENT = 1
+    override fun onStop() {
+        main.removeCallbacks(refresh)
+        super.onStop()
     }
 }
